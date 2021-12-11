@@ -1,21 +1,29 @@
-let express = require("express");
-let app = express();
-let server = require("http").createServer(app);
-let GPIO = require("onoff").Gpio;
-var DHT22 = require("node-dht-sensor");
-let LED = new GPIO(4, "out");
-let FAN = new GPIO(23, "high");
-let COOL = new GPIO(24, "high");
-let HEAT = new GPIO(25, "high");
+import { config } from "dotenv";
+import express from "express";
+import { createServer } from "http";
+import { Server, Socket } from "socket.io";
+import { Device } from "./devices";
 
-let io = require("socket.io")(server, {
+config();
+
+const PORT = process.env.PORT;
+
+const LED = Device.GPIO(4, "out");
+const FAN = Device.GPIO(23, "high");
+const COOL = Device.GPIO(24, "high");
+const HEAT = Device.GPIO(25, "high");
+
+const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
   cors: {
     origin: "*",
   },
 });
 
-server.listen(8080, () => {
-  console.log("Server running...");
+httpServer.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(process.env.DEVENV)
 });
 
 let state = {
@@ -32,12 +40,12 @@ let state = {
   },
 };
 
-io.on("connection", (socket) => {
-  const { id } = socket.client;
+io.on("connection", (socket: Socket) => {
+  const id = socket.id
   console.log(`User connected: ${id}`);
 
   setInterval(() => {
-    DHT22.read(22, 13, function (err, temperature, humidity) {
+    Device.DHT.read(22, 13, function (err, temperature, humidity) {
       if (!err) {
         state = {
           ...state,
@@ -59,7 +67,7 @@ io.on("connection", (socket) => {
             .toFixed(2)
             .toString()}°C, humidity: ${state.thermostatMetrics.currentHumidity
             .toFixed(2)
-            .toString()}%`
+            .toString()}% on socket ${id}`
         );
       }
     });
@@ -118,23 +126,23 @@ io.on("connection", (socket) => {
     io.emit("respondInitialThermostatControls", { ...state.thermostatControls })
   );
 
-  socket.on('setControls', (data) => {
-    console.log(data)
+  socket.on("setControls", (data) => {
+    console.log(data);
   });
 });
 
 process.on("SIGINT", () => {
   console.log("Shutting down...");
 
-  LED.writeSync(0);
+  // LED.writeSync(0);
   // FAN.writeSync(0)
   // COOL.writeSync(0)
   // HEAT.writeSync(0)
 
-  LED.unexport();
-  FAN.unexport();
-  COOL.unexport();
-  HEAT.unexport();
+  // LED.unexport();
+  // FAN.unexport();
+  // COOL.unexport();
+  // HEAT.unexport();
 
   process.exit();
 });
