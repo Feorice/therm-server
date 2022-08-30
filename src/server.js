@@ -1,8 +1,10 @@
 let express = require("express");
-let app = express();
-let server = require("http").createServer(app);
+let http = require("http");
 let GPIO = require("onoff").Gpio;
 var DHT22 = require("node-dht-sensor");
+
+let app = express();
+let server = http.createServer(app);
 let LED = new GPIO(4, "out");
 let FAN = new GPIO(23, "high");
 let COOL = new GPIO(24, "high");
@@ -24,8 +26,8 @@ let state = {
     currentTemperature: 0,
     currentHumidity: 0,
   },
-  thermostatControls: {
-    adjustedTemperature: 10,
+  thermostatSettings: {
+    adjustedTemperature: 50,
     temperatureUnit: "C",
     fanSetting: "auto",
     airSetting: "off",
@@ -54,13 +56,13 @@ io.on("connection", (socket) => {
           currentHumidity: state.thermostatMetrics.currentHumidity.toFixed(0),
         });
         // state = {...state, temperature, humidity }
-        console.log(
-          `temp: ${state.thermostatMetrics.currentTemperature
-            .toFixed(2)
-            .toString()}°C, humidity: ${state.thermostatMetrics.currentHumidity
-            .toFixed(2)
-            .toString()}%`
-        );
+        // console.log(
+        //   `temp: ${state.thermostatMetrics.currentTemperature
+        //     .toFixed(2)
+        //     .toString()}°C, humidity: ${state.thermostatMetrics.currentHumidity
+        //     .toFixed(2)
+        //     .toString()}%`
+        // );
       }
     });
   }, 5000);
@@ -69,7 +71,8 @@ io.on("connection", (socket) => {
     if (data?.change) {
       console.log("data", data);
       const prevAdjustedTemperature =
-        state.thermostatControls.adjustedTemperature;
+        state.thermostatSettings.adjustedTemperature;
+        
       const updatedAjustedTemperature =
         data.change === "increment"
           ? prevAdjustedTemperature + 1
@@ -77,49 +80,60 @@ io.on("connection", (socket) => {
           ? prevAdjustedTemperature - 1
           : prevAdjustedTemperature;
 
-      const updatedControls = {
-        ...state.thermostatControls,
+      const updatedSettings = {
+        ...state.thermostatSettings,
         adjustedTemperature: updatedAjustedTemperature,
       };
 
       state = {
         ...state,
-        thermostatControls: updatedControls,
+        thermostatSettings: updatedSettings,
       };
 
-      console.log("updated controls", updatedControls);
+      console.log("updated controls", updatedSettings);
 
       // When emitting back to client, use io.emit (not socket.emit)
-      io.emit("updateThermostatControls", {
-        ...updatedControls,
+      io.emit("updateThermostatSettings", {
+        ...updatedSettings,
       });
     }
   });
 
   socket.on("setTemperatureUnit", (data) => {
     if (data?.unit) {
-      const updatedControls = {
-        ...state.thermostatControls,
+      const updatedSettings = {
+        ...state.thermostatSettings,
         temperatureUnit: data.unit,
       };
 
       state = {
         ...state,
-        thermostatControls: updatedControls,
+        thermostatSettings: updatedSettings,
       };
 
-      io.emit("updateThermostatControls", {
-        ...updatedControls,
+      io.emit("updateThermostatSettings", {
+        ...updatedSettings,
       });
     }
   });
 
-  socket.on("getInitialThermostatControls", () =>
-    io.emit("respondInitialThermostatControls", { ...state.thermostatControls })
+  socket.on("getInitialThermostatSettings", () =>
+    io.emit("respondInitialThermostatSettings", { ...state.thermostatSettings })
   );
 
-  socket.on('setControls', (data) => {
-    console.log(data)
+  socket.on('setSettings', (data) => {
+    const updatedSettings = {
+      ...state.thermostatSettings,
+      ...data
+    }
+    state = {
+      ...state,
+      thermostatSettings: updatedSettings
+    }
+    io.emit("updateThermostatSettings", {
+      ...updatedSettings,
+    });
+    console.log("updated controls", updatedSettings);
   });
 });
 
